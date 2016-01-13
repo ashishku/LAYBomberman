@@ -160,6 +160,17 @@ LAY.run({
           }
         }
       }
+    },
+    "Images": {
+      $type: "image",
+      many: {
+        rows: ["stone", "dirt", "brick", "hero", "bomb", "heroBomb", "heroFire", "fire", "brickFire"]
+      },
+      props: {
+        imageUrl: LAY.take(function(img) {
+          return "img/40/" + img + ".png";
+        }).fn(LAY.take("", "row.content"))
+      }
     }
   }
 });
