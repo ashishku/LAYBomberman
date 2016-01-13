@@ -7,24 +7,49 @@ var KEY_CODES = {
   38: 'up',
   39: 'right',
   40: 'down',
+  82: 'restart'
 };
 
+data.lives = 3;
+data.bombs = 0;
+data.maxBombs = 1;
+data.sideLength = 40;
+data.bombTimer = 1000;
+data.bombStrength = 1;
+data.smokeOut = 250;
+data.imortal = false;
+data.imortalTime = 300;
+
+var scoreBoard = [
+  {img: "img/logo/bomb.png", text: data.maxBombs},
+  {img: "img/logo/hero.png", text: data.lives}
+];
 LAY.run({
-  data: {
-    sideLength: 35,
-    bombTimer: 1000,
-    bombStrength: 1,
-    smokeOut: 250
-  },
-  props: {
-    backgroundColor: LAY.color("skyblue")
-  },
+  data: data,
   when: {
     keydown: function(e) {
       var keyCode = (e.keyCode) ? e.keyCode : e.charCode;
       if (KEY_CODES[keyCode]) {
-        this.level("/Container").attr("data.onKeyPress").call(undefined, KEY_CODES[keyCode])
+        if(data.lives && KEY_CODES[keyCode] !== "restart") {
+          this.level("/Container").attr("data.onKeyPress").call(undefined, KEY_CODES[keyCode])
+        }
+        else {
+          location.reload();
+        }
       }
+    }
+  },
+  "GameOver": {
+    exist: LAY.take("/", "data.lives").eq(0),
+    props: {
+      centerX: 0,
+      centerY: 0,
+      backgroundColor: LAY.color("aliceblue"),
+      textColor: LAY.color("red"),
+      textSize: 40,
+      textWeight: "bold",
+      textPadding: 15,
+      text: "Game Over"
     }
   },
   "Container": {
@@ -38,25 +63,62 @@ LAY.run({
       "Rows": {
         props: {
           width: LAY.take("/", "data.sideLength").multiply(data.cols).add(10),
-          border: generateBorders(5, "white", "grey"),
           text: LAY.take("", "row.content"),
           textPaddingLeft: 10,
           backgroundColor: LAY.color("whitesmoke")
         },
         many: {
           rows: [
-            "Move Up => 'UP Key'",
-            "Move Left => 'Left Key'",
-            "Move Right => 'UP Right'",
-            "Move Down => 'Down Key'",
-            "Place Bomb => 'Space Bar'"
+            "Up => 'UP Key' | Down => 'Down Key' | Left => 'Left Key' | Right => 'Right Key'",
+            "Place Bomb => 'Space Bar'",
+            "Restart Game => 'R'"
           ]
+        }
+      }
+    },
+    "ScoreBoard": {
+      props: {
+        top: LAY.take("../Controls", "bottom").add(15)
+      },
+      "Rows": {
+        props: {
+          border: generateBorders(2, "white", "grey"),
+          width: 50,
+          height: 30,
+          backgroundColor: LAY.color("skyblue")
+        },
+        many: {
+          $load: function() {
+            this.level("../Rows").rowsUpdate("dummy", false);
+          },
+          rows: scoreBoard,
+          formation: "totheright",
+          fargs: {
+            totheright: {
+              gap: 25
+            }
+          }
+        },
+        "Image": {
+          $type: "image",
+          props: {
+            centerY:0,
+            width: 20,
+            imageUrl: LAY.take(".../", "row.img")
+          }
+        },
+        "Text": {
+          props: {
+            centerY:0,
+            left: LAY.take("../Image", "right").add(10),
+            text: LAY.take(".../", "row.text")
+          }
         }
       }
     },
     "Board": {
       props: {
-        top: LAY.take("../Controls", "bottom").add(10),
+        top: LAY.take("../ScoreBoard", "bottom").add(10),
         width: LAY.take("/", "data.sideLength").multiply(data.cols).add(10),
         height: LAY.take("/", "data.sideLength").multiply(data.rows).add(10),
         border: generateBorders(5, "black", "black")
@@ -189,17 +251,22 @@ function generateBorder(s, w, c) {
 }
 
 function placeBomb() {
-  var heroAt = _.findIndex(data.cells, function(cell) {
-    return cell.hasHero;
-  });
-  if(!data.cells[heroAt].hasBomb) {
-    data.cells[heroAt].hasBomb = true;
-    this.level("../Grid").rowsCommit(data.cells);
+  if(data.bombs < data.maxBombs) {
+    var heroAt = _.findIndex(data.cells, function (cell) {
+      return cell.hasHero;
+    });
+    if (!data.cells[heroAt].hasBomb) {
+      data.cells[heroAt].hasBomb = true;
+      this.level("../Grid").rowsCommit(data.cells);
 
-    var self = this;
-    setTimeout(function() {
-      haveABlast.call(self, heroAt);
-    }, this.level("/").attr("data.bombTimer"));
+      var self = this;
+      setTimeout(function () {
+        data.bombs--;
+        haveABlast.call(self, heroAt);
+      }, this.level("/").attr("data.bombTimer"));
+
+      data.bombs++;
+    }
   }
 }
 
@@ -214,6 +281,7 @@ function haveABlast(bombAt) {
       data.cells[zone].isBrickWall = false;
     }
     data.cells[zone].isOnFire = true;
+    checkIfHeroIsInjured.call(self, zone);
   });
 
   self.level("../Grid").rowsCommit(data.cells);
@@ -266,6 +334,23 @@ function getBurnOutZones(bombAt, strength) {
   }
 }
 
+function checkIfHeroIsInjured(cell) {
+  if(!data.imortal) {
+    if (data.cells[cell].hasHero && data.cells[cell].isOnFire) {
+      data.lives--;
+      data.imortal = true;
+
+      setTimeout(function() {
+        data.imortal = false;
+      }, data.imortalTime);
+    }
+
+    this.level("/").data("lives", data.lives);
+    scoreBoard[0].text = data.lives;
+    this.level("/Container/ScoreBoard/Rows").rowsCommit(scoreBoard);
+  }
+}
+
 function moveHero(c) {
   var heroAt = _.findIndex(data.cells, function(cell) {
     return cell.hasHero;
@@ -280,6 +365,8 @@ function moveHero(c) {
     cellToMove.isEmpty = false;
     this.level("../Grid").rowsCommit(data.cells);
   }
+
+  checkIfHeroIsInjured.call(this, heroAt+c);
 }
 function moveLeft() {
   moveHero.call(this, -1);
