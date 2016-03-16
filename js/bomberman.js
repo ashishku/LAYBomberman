@@ -218,6 +218,17 @@ LAY.run({
               props: {
                 imageUrl: "img/40/bomb.png"
               }
+            },
+            power: {
+              onlyif: LAY.take(".../", "row.isBrickWall").not()
+                .and(LAY.take(".../", "row.isStoneWall").not())
+                .and(LAY.take(".../", "row.hasHero").not())
+                .and(LAY.take(".../", "row.power")),
+              props: {
+                imageUrl: LAY.take(function(power) {
+                  return "img/40/power-" +  power + ".png"
+                }).fn(LAY.take(".../", "row.power"))
+              }
             }
           }
         }
@@ -232,6 +243,15 @@ LAY.run({
         imageUrl: LAY.take(function(img) {
           return "img/40/" + img + ".png";
         }).fn(LAY.take("", "row.content"))
+      }
+    },
+    "Sound": {
+      $type: "audio",
+      props: {
+        audioSources: [
+          {type: "audio/ogg", src: "soundtrack/-003-game-play-normal-.ogg"},
+          {type: "audio/mpeg", src: "soundtrack/-003-game-play-normal-.mp3"},
+        ]
       }
     }
   }
@@ -260,7 +280,7 @@ function placeBomb() {
       this.level("../Grid").rowsCommit(data.cells);
 
       var self = this;
-      setTimeout(function () {
+      requestTimeout(function () {
         data.bombs--;
         haveABlast.call(self, heroAt);
       }, this.level("/").attr("data.bombTimer"));
@@ -272,13 +292,21 @@ function placeBomb() {
 
 function haveABlast(bombAt) {
   var self = this;
-  var burnoutsZones = getBurnOutZones(bombAt, self.level("/").attr("data.bombStrength"));
+  var burnoutsZones = getBurnOutZones(bombAt, data.bombStrength);
   _.each(burnoutsZones, function(zone){
     if(data.cells[zone].hasBomb) {
       data.cells[zone].hasBomb = false;
+      if(zone !== bombAt) {
+
+      }
     }
     if(data.cells[zone].isBrickWall) {
       data.cells[zone].isBrickWall = false;
+    }
+    else {
+      if (data.cells[zone].power) {
+        data.cells[zone].power = null;
+      }
     }
     data.cells[zone].isOnFire = true;
     checkIfHeroIsInjured.call(self, zone);
@@ -286,10 +314,13 @@ function haveABlast(bombAt) {
 
   self.level("../Grid").rowsCommit(data.cells);
 
-  setTimeout(function() {
+  requestTimeout(function() {
     _.each(burnoutsZones, function(zone) {
       data.cells[zone].isOnFire = false;
-      data.cells[zone].isEmpty = true;
+
+      if(!data.cells[zone].power) {
+        data.cells[zone].isEmpty = true;
+      }
     });
     self.level("../Grid").rowsCommit(data.cells);
   }, self.level("/").attr("data.smokeOut"));
@@ -340,7 +371,7 @@ function checkIfHeroIsInjured(cell) {
       data.lives--;
       data.imortal = true;
 
-      setTimeout(function() {
+      requestTimeout(function() {
         data.imortal = false;
       }, data.imortalTime);
     }
@@ -359,6 +390,25 @@ function moveHero(c) {
   if(!cellToMove.isStoneWall && !cellToMove.isBrickWall && !cellToMove.hasBomb) {
     if(!data.cells[heroAt].hasBomb) {
       data.cells[heroAt].isEmpty = true;
+    }
+    if(cellToMove.power) {
+      switch (cellToMove.power) {
+        case 'life':
+          data.lives++;
+          this.level("/").data("lives", data.lives);
+          scoreBoard[0].text = data.lives;
+          break;
+        case 'strength':
+          data.bombStrength++;
+          break;
+        case 'bomb':
+          data.maxBombs++;
+          this.level("/").data("lives", data.maxBombs);
+          scoreBoard[1].text = data.maxBombs;
+          break;
+      }
+      cellToMove.power = null;
+      this.level("/Container/ScoreBoard/Rows").rowsCommit(scoreBoard);
     }
     data.cells[heroAt].hasHero = false;
     cellToMove.hasHero = true;
